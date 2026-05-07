@@ -1,0 +1,49 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["dependencies"]
+solc_version = "0.8.34"
+optimizer = true
+optimizer_runs = 10_000
+via_ir = true
+evm_version = "cancun"
+ffi = false
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
+fs_permissions = [{ access = "read-write", path = "broadcast" }]
+remappings = [
+    "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.6.1/contracts/",
+    "@openzeppelin/contracts-upgradeable/=dependencies/@openzeppelin-contracts-upgradeable-5.6.1/contracts/",
+    "forge-std/=dependencies/forge-std-1.15.0/src/",
+]
+
+[soldeer]
+remappings_generate = false
+
+[dependencies]
+forge-std = { version = "1.15.0", git = "https://github.com/foundry-rs/forge-std.git", tag = "v1.15.0" }
+"@openzeppelin-contracts" = { version = "5.6.1", git = "https://github.com/OpenZeppelin/openzeppelin-contracts.git", tag = "v5.6.1" }
+"@openzeppelin-contracts-upgradeable" = { version = "5.6.1", git = "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git", tag = "v5.6.1" }
+
+[profile.ci]
+fuzz = { runs = 10_000 }
+invariant = { runs = 10_000 }
+
+[fmt]
+bracket_spacing = false
+int_types = "long"
+line_length = 120
+multiline_func_header = "params_first"
+number_underscore = "thousands"
+quote_style = "double"
+tab_width = 4
+wrap_comments = true
+
+[rpc_endpoints]
+xlayer = "${XLAYER_RPC_URL}"
+xlayer_testnet = "${XLAYER_TESTNET_RPC_URL}"
+
+[etherscan]
+xlayer = { key = "${OKLINK_API_KEY}" }
+xlayer_testnet = { key = "${OKLINK_API_KEY}" }

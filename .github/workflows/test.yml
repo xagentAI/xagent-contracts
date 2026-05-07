@@ -1,0 +1,57 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  check:
+    name: Foundry project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Show Forge version
+        run: forge --version
+
+      - name: Cache Soldeer dependencies
+        uses: actions/cache@v5
+        with:
+          path: dependencies
+          key: soldeer-${{ runner.os }}-${{ hashFiles('soldeer.lock') }}
+          restore-keys: |
+            soldeer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: forge soldeer install
+
+      - name: Cache Foundry build
+        uses: actions/cache@v5
+        with:
+          path: |
+            cache
+            out
+          key: foundry-${{ runner.os }}-${{ env.FOUNDRY_PROFILE }}-${{ hashFiles('foundry.toml', 'soldeer.lock', 'src/**', 'test/**', 'script/**') }}
+          restore-keys: |
+            foundry-${{ runner.os }}-${{ env.FOUNDRY_PROFILE }}-
+
+      - name: Run Forge fmt
+        run: forge fmt --check
+
+      - name: Run Forge build
+        run: forge build --sizes
+
+      - name: Run Forge tests
+        run: forge test -vvv
