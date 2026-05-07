@@ -105,8 +105,21 @@ forge script script/Wire.s.sol:Wire \
 ## X Layer network
 
 - Mainnet: chain id `196`, RPC `https://rpc.xlayer.tech`
-- Testnet: chain id `195`, RPC `https://testrpc.xlayer.tech/terigon`
+- Testnet: chain id `1952`, RPC `https://testrpc.xlayer.tech/terigon`
+- Mainnet explorer: `https://web3.okx.com/explorer/x-layer`
+- Testnet explorer: `https://web3.okx.com/explorer/x-layer-testnet`
 - OKLink verifier chain short names: `XLAYER`, `XLAYER_TESTNET`
+
+## Deployed addresses
+
+X Layer testnet (`chain id 1952`) deployment:
+
+- `XPoint` implementation: `0x59C75f6D283835b0Cb62E9C4A816B4Cb1033D36c`
+- `XPoint` proxy (integration address): `0x578E4ae5CeB1F5F8D12e83628B93001c14a9529C`
+- `CheckIn` implementation: `0xC5aA1dCCa8c05Bee7d80e32ebd489c1BDe779057`
+- `CheckIn` proxy (integration address): `0xFf7A5d7769614891953Ef1774048dEFC681Ae624`
+
+Both `CheckIn` implementation and proxy contracts are OKLink verified.
 
 ## EIP-1153 requirement
 
