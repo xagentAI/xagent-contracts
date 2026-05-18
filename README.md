@@ -43,7 +43,7 @@ cp .env.example .env
 
 Fill required env vars:
 
-- `PRIVATE_KEY`
+- `PRIVATE_KEY` (must include `0x` prefix; `vm.envUint` parses it as hex only when prefixed)
 - `CHECKIN_SIGNER`
 - `XPOINT_NAME`
 - `XPOINT_SYMBOL`
@@ -167,6 +167,120 @@ forge script script/Wire.s.sol:Wire \
   --broadcast
 ```
 
+## Mainnet production deployment (X Layer)
+
+Known issue: `forge script ... --broadcast` fails on X Layer mainnet (`chain id 196`) with
+`Error: Chain 196 not supported` (reproduced on `forge 1.5.1`). `forge create` and
+`forge verify-contract` both work normally against the same RPC. Until upstream resolves
+this, deploy the implementation + `ERC1967Proxy(impl, initData)` pair manually with
+`forge create`; the on-chain behavior is identical to the script flow.
+
+Prerequisites:
+
+```sh
+source .env
+# PRIVATE_KEY must be hex with 0x prefix for vm.envUint to parse it. If your .env stores
+# the raw hex without 0x, override it for this shell:
+export PRIVATE_KEY=0x<your_hex_key>
+
+forge build --sizes
+```
+
+Run the mainnet EIP-1153 preflight first:
+
+```sh
+forge create --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy --broadcast \
+  script/SmokeEIP1153.s.sol:EIP1153SmokeTarget
+# call probe() on the deployed address; it must return true
+cast call --rpc-url $XLAYER_RPC_URL <smoke_target_address> "probe()(bool)"
+```
+
+### Deploy XPoint (implementation + proxy)
+
+```sh
+DEPLOYER=$(cast wallet address --private-key $PRIVATE_KEY)
+
+# 1) implementation
+forge create --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy --broadcast \
+  src/XPoint.sol:XPoint
+export XPOINT_IMPL=<address_from_previous_step>
+
+# 2) proxy with initialize(name, symbol, owner, operator, pauser, maxSupply, whitelistMode)
+INIT_DATA=$(cast calldata \
+  "initialize(string,string,address,address,address,uint256,bool)" \
+  "$XPOINT_NAME" "$XPOINT_SYMBOL" $DEPLOYER $DEPLOYER $DEPLOYER $XPOINT_MAX_SUPPLY false)
+
+forge create --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy --broadcast \
+  dependencies/@openzeppelin-contracts-5.6.1/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy \
+  --constructor-args $XPOINT_IMPL $INIT_DATA
+export XPOINT_ADDRESS=<proxy_address_from_previous_step>
+```
+
+### Deploy CheckIn (implementation + proxy)
+
+```sh
+# 1) implementation
+forge create --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy --broadcast \
+  src/CheckIn.sol:CheckIn
+export CHECKIN_IMPL=<address_from_previous_step>
+
+# 2) proxy with initialize(xpoint, signer, owner)
+INIT_DATA=$(cast calldata \
+  "initialize(address,address,address)" \
+  $XPOINT_ADDRESS $CHECKIN_SIGNER $DEPLOYER)
+
+forge create --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy --broadcast \
+  dependencies/@openzeppelin-contracts-5.6.1/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy \
+  --constructor-args $CHECKIN_IMPL $INIT_DATA
+export CHECKIN_ADDRESS=<proxy_address_from_previous_step>
+```
+
+### Wire MINTER_ROLE (mainnet)
+
+```sh
+MINTER_ROLE=$(cast keccak "MINTER_ROLE")
+cast send --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy \
+  $XPOINT_ADDRESS "grantRole(bytes32,address)" $MINTER_ROLE $CHECKIN_ADDRESS
+
+# verify
+cast call --rpc-url $XLAYER_RPC_URL $XPOINT_ADDRESS \
+  "hasRole(bytes32,address)(bool)" $MINTER_ROLE $CHECKIN_ADDRESS
+```
+
+### Verify on OKLink
+
+```sh
+# implementations
+forge verify-contract --rpc-url $XLAYER_RPC_URL \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER \
+  --api-key $OKLINK_API_KEY --watch \
+  $XPOINT_IMPL src/XPoint.sol:XPoint
+
+forge verify-contract --rpc-url $XLAYER_RPC_URL \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER \
+  --api-key $OKLINK_API_KEY --watch \
+  $CHECKIN_IMPL src/CheckIn.sol:CheckIn
+
+# proxies (rebuild constructor args with the same INIT_DATA used during deploy)
+XPOINT_CARGS=$(cast abi-encode "constructor(address,bytes)" $XPOINT_IMPL $XPOINT_INIT)
+forge verify-contract --rpc-url $XLAYER_RPC_URL \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER \
+  --api-key $OKLINK_API_KEY --watch --constructor-args $XPOINT_CARGS \
+  $XPOINT_ADDRESS \
+  dependencies/@openzeppelin-contracts-5.6.1/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy
+
+CHECKIN_CARGS=$(cast abi-encode "constructor(address,bytes)" $CHECKIN_IMPL $CHECKIN_INIT)
+forge verify-contract --rpc-url $XLAYER_RPC_URL \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER \
+  --api-key $OKLINK_API_KEY --watch --constructor-args $CHECKIN_CARGS \
+  $CHECKIN_ADDRESS \
+  dependencies/@openzeppelin-contracts-5.6.1/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy
+```
+
 ## X Layer network
 
 - Mainnet: chain id `196`, RPC `https://rpc.xlayer.tech`
@@ -195,6 +309,18 @@ X Layer mainnet staging (`chain id 196`) deployment:
 - ERC20 metadata: `name="XAgent Staging Point"`, `symbol="XPT-STG"`, `maxSupply=0` (uncapped), `whitelistMode=false`
 - EIP-712 domain: `name="XAgentCheckInStaging"`, `version="1"`, `chainId=196`, `verifyingContract=0x4AD62d394402d775e9053333608AA5f0696A36E8`
 - Owner / operator / pauser / signer: `0xc593e54A2016ea8FD71a4F62974BeC65f74C909C` (staging EOA; rotate before broader use)
+- OKLink verification: `Pass - Verified` for both implementations and proxies.
+
+X Layer mainnet production (`chain id 196`) deployment (2026-05-18):
+
+- `XPoint` implementation: `0x5F4Fa5357261c7EC2122423596277A91b1C92ef7`
+- `XPoint` proxy (integration address): `0xbd6981FD12a1AE3858337c667d4284FDB0811F58`
+- `CheckIn` implementation: `0x6dFD7CFACdD922Bd9d386e6E32274a3815d00230`
+- `CheckIn` proxy (integration address): `0x41311059795E81eB4b177ff049091de55FbD5bb5`
+- ERC20 metadata: `name="XPoint"`, `symbol="XPoint"`, `decimals=18`, `maxSupply=0` (uncapped), `whitelistMode=false`
+- EIP-712 domain: `name="XAgentCheckIn"`, `version="1"`, `chainId=196`, `verifyingContract=0x41311059795E81eB4b177ff049091de55FbD5bb5`
+- Owner / DEFAULT_ADMIN / operator / pauser / signer: `0x8fef397e2B97B9a9734b20c6319515a94b1Daab3` (deployer EOA; rotate to multisig before broader use)
+- `MINTER_ROLE` granted to `CheckIn` proxy: `true`
 - OKLink verification: `Pass - Verified` for both implementations and proxies.
 
 ## EIP-1153 requirement
