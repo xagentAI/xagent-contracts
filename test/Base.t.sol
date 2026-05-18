@@ -39,7 +39,7 @@ abstract contract BaseTest is Test {
         alice = makeAddr("alice");
         bob = makeAddr("bob");
 
-        xpoint = _deployXPointProxy("X Point", "XPT", owner, operator, pauser, 0, false);
+        xpoint = _deployXPointProxy("X-Point", "XPT", owner, operator, pauser, 0, false);
         checkIn = _deployCheckInProxy(address(xpoint), signer, owner);
 
         bytes32 minterRole = xpoint.MINTER_ROLE();
@@ -118,7 +118,7 @@ abstract contract BaseTest is Test {
     ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
         bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, owner_, spender, value, nonce, deadline));
         bytes32 domainSeparator = keccak256(
-            abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256("X Point"), keccak256("1"), block.chainid, address(xpoint))
+            abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256("X-Point"), keccak256("1"), block.chainid, address(xpoint))
         );
         bytes32 digest = keccak256(bytes.concat("\x19\x01", domainSeparator, structHash));
         (v, r, s) = vm.sign(privateKey, digest);

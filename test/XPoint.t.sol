@@ -17,7 +17,7 @@ contract XPointTest is BaseTest {
         XPoint impl = new XPoint();
         vm.expectRevert(XPoint.ZeroAddress.selector);
         new ERC1967Proxy(
-            address(impl), abi.encodeCall(XPoint.initialize, ("X Point", "XPT", address(0), operator, pauser, 0, false))
+            address(impl), abi.encodeCall(XPoint.initialize, ("X-Point", "XPT", address(0), operator, pauser, 0, false))
         );
     }
 
@@ -53,7 +53,7 @@ contract XPointTest is BaseTest {
     }
 
     function test_RevertWhen_mint_ExceedsCap() public {
-        XPoint capped = _deployXPointProxy("X Point", "XPT", owner, operator, pauser, 100, false);
+        XPoint capped = _deployXPointProxy("X-Point", "XPT", owner, operator, pauser, 100, false);
         bytes32 minterRole = capped.MINTER_ROLE();
         vm.prank(owner);
         capped.grantRole(minterRole, owner);

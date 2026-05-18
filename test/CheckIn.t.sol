@@ -174,7 +174,7 @@ contract CheckInTest is BaseTest {
         checkIn.setSigner(vm.addr(OTHER_SIGNER_PK));
         assertEq(checkIn.signer(), vm.addr(OTHER_SIGNER_PK));
 
-        XPoint another = _deployXPointProxy("XP2", "XP2", owner, operator, pauser, 0, false);
+        XPoint another = _deployXPointProxy("X-Point", "XPT", owner, operator, pauser, 0, false);
         vm.prank(owner);
         checkIn.setXPoint(address(another));
         assertEq(address(checkIn.xpoint()), address(another));
@@ -190,7 +190,7 @@ contract CheckInTest is BaseTest {
     }
 
     function test_xPointSwitch_requiresMinterRoleWiring() public {
-        XPoint next = _deployXPointProxy("X Point 2", "XP2", owner, operator, pauser, 0, false);
+        XPoint next = _deployXPointProxy("X-Point", "XPT", owner, operator, pauser, 0, false);
         vm.prank(owner);
         checkIn.setXPoint(address(next));
 
