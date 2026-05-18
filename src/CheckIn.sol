@@ -88,7 +88,7 @@ contract CheckIn is Initializable, UUPSUpgradeable, EIP712Upgradeable, Ownable2S
     ) external initializer {
         if (xpoint_ == address(0) || signer_ == address(0) || owner_ == address(0)) revert ZeroAddress();
 
-        __EIP712_init("XAgentCheckIn", "1");
+        __EIP712_init(_domainName(), _domainVersion());
         __Pausable_init();
         __Ownable2Step_init();
         __Ownable_init(owner_);
@@ -189,4 +189,12 @@ contract CheckIn is Initializable, UUPSUpgradeable, EIP712Upgradeable, Ownable2S
     function _authorizeUpgrade(
         address
     ) internal override onlyOwner {}
+
+    function _domainName() internal pure virtual returns (string memory) {
+        return "XAgentCheckIn";
+    }
+
+    function _domainVersion() internal pure virtual returns (string memory) {
+        return "1";
+    }
 }
