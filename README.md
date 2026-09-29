@@ -428,7 +428,9 @@ X Layer mainnet production (`chain id 196`) deployment (2026-05-18):
 - `CheckIn` proxy (integration address): `0x41311059795E81eB4b177ff049091de55FbD5bb5`
 - ERC20 metadata: `name="XPoint"`, `symbol="XPoint"`, `decimals=18`, `maxSupply=0` (uncapped), `whitelistMode=false`
 - EIP-712 domain: `name="XAgentCheckIn"`, `version="1"`, `chainId=196`, `verifyingContract=0x41311059795E81eB4b177ff049091de55FbD5bb5`
-- Owner / DEFAULT_ADMIN / operator / pauser / signer: `0x8fef397e2B97B9a9734b20c6319515a94b1Daab3` (deployer EOA; rotate to multisig before broader use)
+- Owner / DEFAULT_ADMIN / operator / pauser (`CheckIn` and `XPoint`): `0xAdd92B5cAdB4ad54D9CA21B22A9edB62721e04Af` (admin EOA, rotated 2026-09-26; not used by the xerpa service)
+- `CheckIn` signer: `0x51619868EAa406CC36F91C73Ab72cb99A3448192` (xerpa `business_wallet_keystore` wallet_key `xagent-checkin-signer`, rotated 2026-09-26)
+- Retired: deployer EOA `0x8fef397e2B97B9a9734b20c6319515a94b1Daab3` (all roles revoked 2026-09-26)
 - `MINTER_ROLE` granted to `CheckIn` proxy: `true`
 - OKLink verification: `Pass - Verified` for both implementations and proxies.
 
