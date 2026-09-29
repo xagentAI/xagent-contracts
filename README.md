@@ -15,6 +15,13 @@ Upgradeable smart-contract package for XAgent reward points on X Layer.
   - replay protection with bitmap claim IDs
   - mints `XPoint` rewards to caller after signature validation
 
+- `UsageAttestation` (`src/UsageAttestation.sol`)
+  - UUPS upgradeable, `Ownable2Step`, `Pausable`; independent of `XPoint` and `CheckIn`
+  - permissionless `attestUsage(agentId, modelId, inputTokens, outputTokens, usageRef)`; account is `msg.sender`
+  - every attestation is emitted with `basis = BASIS_ESTIMATED` (`1`); figures are estimates, not metered
+  - per-account totals and a per-account `usageRef` replay set; history lives only in `UsageAttested` events
+  - no mint, no signature; owner can pause, upgrade, and rescue ETH/ERC20; renounce disabled
+
 ## Trust model
 
 `owner` (recommended: multisig/timelock) controls upgrades and keeps sole `DEFAULT_ADMIN_ROLE`:
@@ -28,11 +35,12 @@ Upgradeable smart-contract package for XAgent reward points on X Layer.
 
 ## Toolchain
 
-- Solidity `0.8.34`
-- Foundry `forge`
+- Solidity `0.8.37` (`evm_version = "cancun"`)
+- Foundry `forge` `1.8.3`
 - Soldeer dependencies
-- OpenZeppelin Contracts/Upgradeable `5.6.1`
-- `forge-std` `1.15.0`
+- OpenZeppelin Contracts/Upgradeable `5.7.0`
+- `forge-std` `1.16.2`
+- `openzeppelin-foundry-upgrades` `0.4.1` (upgrade-safety validation needs Node.js and `--ffi`)
 
 ## Setup
 
@@ -281,6 +289,96 @@ forge verify-contract --rpc-url $XLAYER_RPC_URL \
   dependencies/@openzeppelin-contracts-5.6.1/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy
 ```
 
+The production `XPoint` / `CheckIn` addresses above were deployed and verified with Solidity `0.8.34` and
+OpenZeppelin `5.6.1`. Re-verifying them needs a checkout from before the toolchain bump to `0.8.37` / `5.7.0`.
+
+## UsageAttestation deployment (X Layer)
+
+`script/DeployUsageAttestation.s.sol` deploys the implementation and an ERC1967 UUPS proxy through
+`openzeppelin-foundry-upgrades` (which runs upgrade-safety validation first), initializes `owner` to the
+broadcasting account, and logs both addresses. It only sends the two deployment transactions; it writes no
+database or config.
+
+Use a dedicated deployer/owner account; do not reuse any `CheckIn` / `XPoint` owner, signer, or staging key.
+Intended deployer/owner addresses:
+
+- Testnet (`chain id 1952`): `0x4CFE52F982A71B8c48e614Dabf700A8eB34D555B`
+- Production (`chain id 196`): `0xb1A76F87eD4b71F867f2D550967DBEF95160888d`
+
+`PRIVATE_KEY` must be that account's key (hex with `0x` prefix). Export it in the shell for the deploy only;
+do not write it into `.env`. Deploy testnet first, then production.
+
+Dry run (local simulation, validates upgrade safety, sends nothing):
+
+```sh
+forge script script/DeployUsageAttestation.s.sol:DeployUsageAttestation --ffi --force
+```
+
+### Testnet (`chain id 1952`)
+
+```sh
+forge script script/DeployUsageAttestation.s.sol:DeployUsageAttestation \
+  --ffi --force \
+  --rpc-url $XLAYER_TESTNET_RPC_URL \
+  --broadcast \
+  --verify \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER_TESTNET \
+  --verifier-api-key $OKLINK_API_KEY
+```
+
+### Mainnet (`chain id 196`)
+
+```sh
+forge script script/DeployUsageAttestation.s.sol:DeployUsageAttestation \
+  --ffi --force --legacy \
+  --rpc-url $XLAYER_RPC_URL \
+  --broadcast \
+  --verify \
+  --verifier oklink \
+  --verifier-url https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER \
+  --verifier-api-key $OKLINK_API_KEY
+```
+
+Foundry 1.8.3 names the verifier key flag `--verifier-api-key`; `--api-key` is rejected. With 1.8.3,
+`forge script --broadcast` on chain `196` worked for this contract.
+
+If `forge script --broadcast` still fails on chain `196` with `Chain 196 not supported` (see the mainnet production
+section above), run the dry run first so validation passes, then deploy the same pair with `forge create`:
+
+```sh
+DEPLOYER=$(cast wallet address --private-key $PRIVATE_KEY)
+
+forge create --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy --broadcast \
+  src/UsageAttestation.sol:UsageAttestation
+export USAGE_ATTESTATION_IMPL=<address_from_previous_step>
+
+USAGE_ATTESTATION_INIT=$(cast calldata "initialize(address)" $DEPLOYER)
+forge create --rpc-url $XLAYER_RPC_URL --private-key $PRIVATE_KEY --legacy --broadcast \
+  dependencies/@openzeppelin-contracts-5.7.0/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy \
+  --constructor-args $USAGE_ATTESTATION_IMPL $USAGE_ATTESTATION_INIT
+export USAGE_ATTESTATION_ADDRESS=<proxy_address_from_previous_step>
+```
+
+Then verify both with `forge verify-contract` as in the mainnet production section (proxy constructor args:
+`cast abi-encode "constructor(address,bytes)" $USAGE_ATTESTATION_IMPL $USAGE_ATTESTATION_INIT`).
+
+### Post-deploy check
+
+A network is done when the explorer shows the implementation and proxy verified and one `attestUsage` has
+emitted `UsageAttested`:
+
+```sh
+cast call --rpc-url <rpc> $USAGE_ATTESTATION_ADDRESS "owner()(address)"
+
+# agentId = bytes32("x-agent"), modelId = bytes32("x-agent-llm")
+cast send --rpc-url <rpc> --private-key <any_funded_account_key> $USAGE_ATTESTATION_ADDRESS \
+  "attestUsage(bytes32,bytes32,uint256,uint256,bytes32)" \
+  0x782d6167656e7400000000000000000000000000000000000000000000000000 \
+  0x782d6167656e742d6c6c6d000000000000000000000000000000000000000000 \
+  429 860 $(cast keccak "deploy-smoke-1")
+```
+
 ## X Layer network
 
 - Mainnet: chain id `196`, RPC `https://rpc.xlayer.tech`
@@ -290,6 +388,17 @@ forge verify-contract --rpc-url $XLAYER_RPC_URL \
 - OKLink verifier chain short names: `XLAYER`, `XLAYER_TESTNET`
 
 ## Deployed addresses
+
+`UsageAttestation` (2026-09-29, Solidity `0.8.37`, OpenZeppelin `5.7.0`):
+
+| | X Layer testnet (`1952`) | X Layer mainnet (`196`) |
+| --- | --- | --- |
+| Proxy (integration address) | `0xb09BD05Ca26A45e878d7D1243c97aC01E0A8Ec97` | `0x017c88936943CeA21E5b47f76F85d3C9b557D042` |
+| Implementation | `0x8210d9D26C336e7095b3Bc0F5Ab82D78B0b17530` | `0x57B60047074D21FE7147AEF7557eAcd800Ad8fF6` |
+| Owner | `0x4CFE52F982A71B8c48e614Dabf700A8eB34D555B` | `0xb1A76F87eD4b71F867f2D550967DBEF95160888d` |
+| Smoke `UsageAttested` tx | `0x89cdf2d973198c4b475283825cf8e58bb18e719f1e77e3c4940a8c5bbdebb012` | `0x0db710a3073cabaede7292f332725ba5a8ae72d989be68c727998615df8bbbba` |
+
+Implementation and proxy are OKLink verified on both networks.
 
 X Layer testnet (`chain id 1952`) deployment:
 

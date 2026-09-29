@@ -1,17 +1,25 @@
+version = 2
+
 [[dependencies]]
 name = "@openzeppelin-contracts"
-version = "5.6.1"
+version = "5.7.0"
 git = "https://github.com/OpenZeppelin/openzeppelin-contracts.git"
-rev = "5fd1781b1454fd1ef8e722282f86f9293cacf256"
+rev = "cab19933c33c2ad1d4c7a84864a3601dddfd16f3"
 
 [[dependencies]]
 name = "@openzeppelin-contracts-upgradeable"
-version = "5.6.1"
+version = "5.7.0"
 git = "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git"
-rev = "7bf4727aacdbfaa0f36cbd664654d0c9e1dc52bf"
+rev = "14f52c54d3a1eefbda3d4071efba24d3c1e07e8a"
 
 [[dependencies]]
 name = "forge-std"
-version = "1.15.0"
+version = "1.16.2"
 git = "https://github.com/foundry-rs/forge-std.git"
-rev = "0844d7e1fc5e60d77b68e469bff60265f236c398"
+rev = "bf647bd6046f2f7da30d0c2bf435e5c76a780c1b"
+
+[[dependencies]]
+name = "openzeppelin-foundry-upgrades"
+version = "0.4.1"
+git = "https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades.git"
+rev = "258e12e727bfe7f0ec30c51995d01ec88b82efc1"
