@@ -355,6 +355,47 @@ contract XAgentAirdropTest is Test {
         assertEq(verifyingContract, address(airdrop));
     }
 
+    function test_hashClaim_matchesIndependentEip712Encoding() public view {
+        bytes32 typehash = keccak256(
+            "Claim(address claimant,address token,uint256 amount,uint256 fee,uint256 claimId,uint256 epoch,uint256 deadline)"
+        );
+        assertEq(airdrop.CLAIM_TYPEHASH(), typehash);
+
+        bytes32 domainSeparator = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("XAgentAirdrop"),
+                keccak256("1"),
+                block.chainid,
+                address(airdrop)
+            )
+        );
+        bytes32 structHash =
+            keccak256(abi.encode(typehash, alice, address(uxlink), 7 ether, 1 ether, 42, 0, 1_900_000_000));
+        assertEq(
+            airdrop.hashClaim(alice, address(uxlink), 7 ether, 1 ether, 42, 1_900_000_000),
+            keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash))
+        );
+    }
+
+    /// Must stay identical to xerpaai-go `TestClaimDigestMatchesSepoliaHashClaim`.
+    function test_hashClaim_matchesBackendGoldenVector() public {
+        address verifyingContract = 0xC06f2e4757c3298BDFd929d25773D3c9Dd62F216;
+        vm.chainId(11_155_111);
+        vm.etch(verifyingContract, address(airdrop).code);
+
+        bytes32 digest = XAgentAirdrop(verifyingContract)
+            .hashClaim(
+                0x1111111111111111111111111111111111111111,
+                0xe2D6b2366733CcA24355e91e0679F0988D410f52,
+                1_234_500_000_000_000_000_000,
+                12_345_000_000_000_000_000,
+                18_446_744_073_709_551_621, // ClaimId(round 1, seq 5)
+                1_800_000_000
+            );
+        assertEq(digest, 0xb695eddb584c86747a2f99c3d0b0f20d774f5c413391a53dff8a5787d5a058f1);
+    }
+
     function test_RevertWhen_constructor_InvalidArgs() public {
         vm.expectRevert(XAgentAirdrop.ZeroAddress.selector);
         new XAgentAirdrop(address(0), address(allowanceModule), signer, guardian);
@@ -366,6 +407,10 @@ contract XAgentAirdropTest is Test {
         new XAgentAirdrop(address(safe), address(allowanceModule), address(0), guardian);
 
         // Guardian may be address(0).
+        vm.expectEmit(true, true, true, true);
+        emit XAgentAirdrop.SignerUpdated(address(0), signer);
+        vm.expectEmit(true, true, true, true);
+        emit XAgentAirdrop.GuardianUpdated(address(0), address(0));
         XAgentAirdrop noGuardian = new XAgentAirdrop(address(safe), address(allowanceModule), signer, address(0));
         assertEq(noGuardian.guardian(), address(0));
     }
@@ -415,6 +460,14 @@ contract XAgentAirdropTest is Test {
         assertEq(uxlink.balanceOf(bob), gross);
     }
 
+    function test_claim_succeedsAtExactDeadline() public {
+        uint256 deadline = vm.getBlockTimestamp();
+        bytes memory sig = _signClaim(SIGNER_PK, alice, address(uxlink), 1000 ether, 10 ether, 103, deadline);
+        vm.prank(alice);
+        airdrop.claim(address(uxlink), 1000 ether, 10 ether, 103, deadline, payable(alice), sig);
+        assertEq(uxlink.balanceOf(alice), 990 ether);
+    }
+
     function test_claim_autoRefillsWhenFloatCannotCover() public {
         uint256 deadline = vm.getBlockTimestamp() + 30 minutes;
         _claimAs(alice, PER_CLAIM_CAP, 111, deadline);
@@ -432,6 +485,31 @@ contract XAgentAirdropTest is Test {
         uint256[5] memory allowance = _allowance(address(uxlink));
         assertEq(allowance[1], FLOAT_TARGET + 9900 ether);
         assertEq(allowance[4], 3);
+    }
+
+    function test_claim_whenFloatPlusCappedRefillExactlyCoversNet() public {
+        _execSafeCall(address(airdrop), abi.encodeCall(XAgentAirdrop.returnToSafe, (address(uxlink), 9050 ether)));
+        _execSafeCall(
+            address(allowanceModule),
+            abi.encodeCall(
+                IAllowanceModuleAdmin.setAllowance, (address(airdrop), address(uxlink), 14_000 ether, RESET_TIME_MIN, 0)
+            )
+        );
+
+        // Float 950 + remaining allowance 4,000 == net 4,950: the claim empties the float exactly.
+        bytes memory sig = _signClaim(
+            SIGNER_PK, alice, address(uxlink), PER_CLAIM_CAP, 50 ether, 114, vm.getBlockTimestamp() + 30 minutes
+        );
+        vm.expectEmit(true, true, true, true, address(airdrop));
+        emit XAgentAirdrop.FloatRefilled(address(uxlink), 4000 ether, 4950 ether, alice);
+        vm.prank(alice);
+        airdrop.claim(
+            address(uxlink), PER_CLAIM_CAP, 50 ether, 114, vm.getBlockTimestamp() + 30 minutes, payable(alice), sig
+        );
+
+        assertEq(uxlink.balanceOf(alice), 4950 ether);
+        assertEq(uxlink.balanceOf(address(airdrop)), 0);
+        assertEq(_allowance(address(uxlink))[1], 14_000 ether);
     }
 
     function test_RevertWhen_claim_floatAndAllowanceExhausted_thenResetsNextPeriod() public {
@@ -813,6 +891,8 @@ contract XAgentAirdropTest is Test {
 
         // Signature signed for epoch 1 works until signer is rotated.
         bytes memory epoch1Sig = _signClaim(SIGNER_PK, alice, address(uxlink), 100 ether, 1 ether, 303, nextDeadline);
+        vm.expectEmit(true, true, true, true, address(airdrop));
+        emit XAgentAirdrop.SignerUpdated(signer, rotatedSigner);
         _execSafeCall(address(airdrop), abi.encodeCall(XAgentAirdrop.setSigner, (rotatedSigner)));
 
         vm.prank(alice);
@@ -873,8 +953,16 @@ contract XAgentAirdropTest is Test {
         vm.expectRevert(Pausable.EnforcedPause.selector);
         airdrop.claim(address(uxlink), 100 ether, 1 ether, 601, deadline, payable(alice), sig);
 
-        // Guardian cannot unpause or change settings.
+        // Guardian advances the epoch, also while paused.
         vm.startPrank(guardian);
+        vm.expectEmit(true, true, true, true, address(airdrop));
+        emit XAgentAirdrop.EpochAdvanced(0, 1, guardian);
+        airdrop.advanceEpoch();
+        vm.expectEmit(true, true, true, true, address(airdrop));
+        emit XAgentAirdrop.EpochAdvanced(1, 2, guardian);
+        assertEq(airdrop.advanceEpoch(), 2);
+
+        // Guardian cannot unpause or change settings.
         vm.expectRevert(XAgentAirdrop.OnlySafe.selector);
         airdrop.unpause();
         vm.expectRevert(XAgentAirdrop.OnlySafe.selector);
@@ -982,6 +1070,16 @@ contract XAgentAirdropTest is Test {
         assertFalse(airdrop.isClaimed(claimId));
     }
 
+    function test_settleManualClaim_allowsFeeBelowFeeRate() public {
+        vm.expectEmit(true, true, true, true, address(airdrop));
+        emit XAgentAirdrop.ManualClaimSettled(703, alice, bob, address(uxlink), 1000 ether, 0, 1000 ether);
+        _execSafeCall(
+            address(airdrop),
+            abi.encodeCall(XAgentAirdrop.settleManualClaim, (703, alice, bob, address(uxlink), 1000 ether, 0))
+        );
+        assertTrue(airdrop.isClaimed(703));
+    }
+
     function test_setGuardian_rotatesAndClearsGuardian() public {
         vm.expectEmit(true, true, true, true, address(airdrop));
         emit XAgentAirdrop.GuardianUpdated(guardian, alice);
@@ -1056,6 +1154,8 @@ contract XAgentAirdropTest is Test {
 
         // Forced ETH (e.g. via selfdestruct) is swept back to `safe`.
         vm.deal(address(airdrop), 3 ether);
+        vm.expectEmit(true, true, true, true, address(airdrop));
+        emit XAgentAirdrop.ETHRescued(3 ether);
         _execSafeCall(address(airdrop), abi.encodeCall(XAgentAirdrop.rescueETH, (3 ether)));
         assertEq(address(airdrop).balance, 0);
         assertEq(address(safe).balance, 3 ether);
