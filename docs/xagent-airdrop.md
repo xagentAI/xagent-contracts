@@ -150,7 +150,7 @@ Routes are defined in `src/api/xagent-airdrop.api` under `/user/xagent/airdrop`;
 
 - **Sizing**:
   - Worst-case loss per period, if the Signer is compromised or the contract has a bug, is one Period Allowance plus one Float Target per token, until someone pauses. Size both with that in mind.
-  - Set the Float Target to at least twice the Per-Claim Cap, so every refill moves at least half the target. `AllowanceModule` transfers (and its nonce) then grow with the value distributed divided by half the Float Target, not with the number of Claims. `configureToken` only enforces `maxClaimAmount <= floatTarget <= type(uint96).max`.
+  - Set the Float Target to `max(2 × Per-Claim Cap, self-service total / 10,000)`. Below twice the cap, a refill may move only one Claim's worth, so `AllowanceModule` transfers (and its nonce) approach the number of Claims. At twice the cap or more, every refill moves at least half the target, so transfers stay below `2 × self-service total / floatTarget` plus one allowance-capped refill per period. `floatTarget >= self-service total / 10,000` caps the first part at 20,000, well under the 65,534-transfer limit (Section 2.7). `configureToken` only enforces `maxClaimAmount <= floatTarget <= type(uint96).max`.
   - The Period Allowance must cover the expected payout per period, including the initial seeding. The XAGT launch plan is 10% of the self-service total per hour for the first 48 hours, then 2% per hour.
 - **Refills**:
   - Claims refill the float themselves whenever it cannot cover them. To keep that extra gas off user transactions, run an optional keeper that calls `refill(token)` whenever `balanceOf(airdrop) <= floatTarget / 2`.
