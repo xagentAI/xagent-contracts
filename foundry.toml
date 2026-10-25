@@ -2,7 +2,7 @@
 src = "src"
 out = "out"
 libs = ["dependencies"]
-solc_version = "0.8.34"
+solc_version = "0.8.38"
 optimizer = true
 optimizer_runs = 10_000
 via_ir = true
@@ -11,20 +11,22 @@ ffi = false
 ast = true
 build_info = true
 extra_output = ["storageLayout"]
-fs_permissions = [{ access = "read-write", path = "broadcast" }]
+fs_permissions = [{ access = "read-write", path = "broadcast" }, { access = "read", path = "out" }]
 remappings = [
-    "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.6.1/contracts/",
-    "@openzeppelin/contracts-upgradeable/=dependencies/@openzeppelin-contracts-upgradeable-5.6.1/contracts/",
-    "forge-std/=dependencies/forge-std-1.15.0/src/",
+    "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.7.0/contracts/",
+    "@openzeppelin/contracts-upgradeable/=dependencies/@openzeppelin-contracts-upgradeable-5.7.0/contracts/",
+    "forge-std/=dependencies/forge-std-1.17.0/src/",
+    "openzeppelin-foundry-upgrades/=dependencies/openzeppelin-foundry-upgrades-0.4.1/src/",
 ]
 
 [soldeer]
 remappings_generate = false
 
 [dependencies]
-forge-std = { version = "1.15.0", git = "https://github.com/foundry-rs/forge-std.git", tag = "v1.15.0" }
-"@openzeppelin-contracts" = { version = "5.6.1", git = "https://github.com/OpenZeppelin/openzeppelin-contracts.git", tag = "v5.6.1" }
-"@openzeppelin-contracts-upgradeable" = { version = "5.6.1", git = "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git", tag = "v5.6.1" }
+forge-std = { version = "1.17.0", git = "https://github.com/foundry-rs/forge-std.git", tag = "v1.17.0" }
+"@openzeppelin-contracts" = { version = "5.7.0", git = "https://github.com/OpenZeppelin/openzeppelin-contracts.git", tag = "v5.7.0" }
+"@openzeppelin-contracts-upgradeable" = { version = "5.7.0", git = "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable.git", tag = "v5.7.0" }
+openzeppelin-foundry-upgrades = { version = "0.4.1", git = "https://github.com/OpenZeppelin/openzeppelin-foundry-upgrades.git", tag = "v0.4.1" }
 
 [profile.ci]
 fuzz = { runs = 10_000 }
@@ -41,9 +43,11 @@ tab_width = 4
 wrap_comments = true
 
 [rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"
 xlayer = "${XLAYER_RPC_URL}"
 xlayer_testnet = "${XLAYER_TESTNET_RPC_URL}"
 
 [etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY}", chain = 1 }
 xlayer = { key = "${OKLINK_API_KEY}", chain = 196, url = "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER" }
 xlayer_testnet = { key = "${OKLINK_API_KEY}", chain = 1952, url = "https://www.oklink.com/api/v5/explorer/contract/verify-source-code-plugin/XLAYER_TESTNET" }

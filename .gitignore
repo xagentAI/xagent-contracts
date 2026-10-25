@@ -1,4 +1,6 @@
 .env
+.env.prod
+.wallets/
 dependencies
 cache
 out
