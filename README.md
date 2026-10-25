@@ -35,11 +35,11 @@ Upgradeable smart-contract package for XAgent reward points on X Layer.
 
 ## Toolchain
 
-- Solidity `0.8.37` (`evm_version = "cancun"`)
+- Solidity `0.8.38` (`evm_version = "cancun"`)
 - Foundry `forge` `1.8.3`
 - Soldeer dependencies
 - OpenZeppelin Contracts/Upgradeable `5.7.0`
-- `forge-std` `1.16.2`
+- `forge-std` `1.17.0`
 - `openzeppelin-foundry-upgrades` `0.4.1` (upgrade-safety validation needs Node.js and `--ffi`)
 
 ## Setup
@@ -398,7 +398,7 @@ cast send --rpc-url <rpc> --private-key <any_funded_account_key> $USAGE_ATTESTAT
 | Owner | `0x4CFE52F982A71B8c48e614Dabf700A8eB34D555B` | `0xb1A76F87eD4b71F867f2D550967DBEF95160888d` |
 | Smoke `UsageAttested` tx | `0x89cdf2d973198c4b475283825cf8e58bb18e719f1e77e3c4940a8c5bbdebb012` | `0x0db710a3073cabaede7292f332725ba5a8ae72d989be68c727998615df8bbbba` |
 
-Implementation and proxy are OKLink verified on both networks.
+Implementation and proxy are OKLink verified on both networks. Re-verifying them after the toolchain bump to `0.8.38` needs `--compiler-version 0.8.37`.
 
 X Layer testnet (`chain id 1952`) deployment:
 
